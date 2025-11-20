@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sound Button App</title>
+
+<link rel="manifest" href="manifest.json" />
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f2f2f2;
+        padding: 20px;
+    }
+    h2 {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    #buttonArea {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 30px;
+    }
+    .soundBtn {
+        width: 100%;
+        aspect-ratio: 1;
+        background: #3498db;
+        border: none;
+        border-radius: 50%;
+        color: white;
+        font-size: 18px;
+        cursor: pointer;
+        position: relative;
+    }
+    .removeBtn {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: red;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        font-size: 16px;
+        cursor: pointer;
+    }
+    #addForm {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+    }
+    input {
+        width: 100%;
+        padding: 10px;
+        margin-top: 10px;
+    }
+    button.add {
+        background: #27ae60;
+        color: white;
+        padding: 12px;
+        margin-top: 15px;
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        font-size: 18px;
+        cursor: pointer;
+    }
+</style>
+</head>
+
+<body>
+
+<h2>Sound Button App</h2>
+
+<div id="buttonArea"></div>
+
+<div id="addForm">
+    <h3>Add New Button</h3>
+    <input type="text" id="btnText" placeholder="Button Name" />
+    <input type="file" id="btnSound" accept="audio/*" />
+    <button class="add" onclick="addButton()">Add Button</button>
+</div>
+
+<script>
+let db;
+let currentAudio = null; // only one sound plays at a time
+
+// Open IndexedDB
+const request = indexedDB.open("SoundDB", 1);
+
+request.onupgradeneeded = function(e) {
+    db = e.target.result;
+    db.createObjectStore("buttons", { keyPath: "id", autoIncrement: true });
+};
+
+request.onsuccess = function(e) {
+    db = e.target.result;
+    loadButtons();
+};
+
+function addButton() {
+    const text = document.getElementById("btnText").value;
+    const file = document.getElementById("btnSound").files[0];
+
+    if (!text || !file) {
+        alert("Name + Sound select karo");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function() {
+        const btnObj = { text, sound: reader.result };
+        const tx = db.transaction("buttons", "readwrite");
+        tx.objectStore("buttons").add(btnObj);
+        tx.oncomplete = loadButtons;
+    };
+    reader.readAsDataURL(file);
+}
+
+function loadButtons() {
+    const area = document.getElementById("buttonArea");
+    area.innerHTML = "";
+
+    const tx = db.transaction("buttons", "readonly");
+    const store = tx.objectStore("buttons");
+
+    store.getAll().onsuccess = function(e) {
+        const buttons = e.target.result;
+
+        buttons.forEach((b) => {
+            const div = document.createElement("button");
+            div.className = "soundBtn";
+            div.textContent = b.text;
+
+            const remove = document.createElement("button");
+            remove.className = "removeBtn";
+            remove.textContent = "×";
+            remove.onclick = (ev) => {
+                ev.stopPropagation();
+                deleteButton(b.id);
+            };
+            div.appendChild(remove);
+
+            div.onclick = () => {
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio.currentTime = 0;
+                }
+                currentAudio = new Audio(b.sound);
+                currentAudio.play();
+            };
+
+            area.appendChild(div);
+        });
+    };
+}
+
+function deleteButton(id) {
+    const tx = db.transaction("buttons", "readwrite");
+    tx.objectStore("buttons").delete(id);
+    tx.oncomplete = loadButtons;
+}
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js");
+}
+</script>
+
+</body>
+</html>
